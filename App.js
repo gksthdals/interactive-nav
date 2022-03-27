@@ -34,9 +34,9 @@ export default function App() {
           (() => {
             switch (url.charAt(32)) {
               case "p":
-                return <Public url={url} />;
+                return <Public style= {{ flex: 1 }} url={url} />;
               case "w":
-                return <Walk url={url} />;
+                return <Walk style={{ flex: 1 }} url={url} />;
               default:
                 return (
                   <Text

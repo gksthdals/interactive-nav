@@ -12,6 +12,7 @@
   "dependencies": {
     "dom-parser": "^0.1.6",
     "expo": "~44.0.0",
+    "expo-location": "~14.0.1",
     "expo-status-bar": "~1.2.0",
     "jssoup": "^0.0.15",
     "jssoup-selector": "^0.0.1",
