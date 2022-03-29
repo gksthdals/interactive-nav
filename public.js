@@ -1,13 +1,39 @@
 import React, { useState, useEffect } from "react";
 import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
 import JSSoup from "jssoup";
-import { Feather, MaterialIcons, Entypo, Fontisto } from "@expo/vector-icons";
+import * as TaskManager from "expo-task-manager";
+import * as Location from "expo-location";
+
+const LOCATION_TASK_NAME = "LocationUpdate";
+
+TaskManager.defineTask(LOCATION_TASK_NAME, ({ data: { locations }, error }) => {
+  if (error) {
+    // check `error.message` for more details.
+    return;
+  }
+  console.log("Received new locations", locations);
+});
+
+const requestPermissions = async () => {
+  const foregroundPromise = await Location.requestForegroundPermissionsAsync();
+  const backgroundPromise = await Location.requestBackgroundPermissionsAsync();
+
+  if (
+    foregroundPromise.status === "granted" &&
+    backgroundPromise.status === "granted"
+  ) {
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      accuracy: Location.Accuracy.Balanced,
+    });
+  }
+};
 
 export default function Public(props) {
   // routes.keys:
   const [routes, setRoutes] = useState([]);
   const [busRoutes, setBusRoutes] = useState([]);
   const [prevBusStop, setPrevBusStop] = useState({});
+
   const getListSectionListDetail = (htmlText) => {
     const soup = new JSSoup(htmlText);
     const ol_element = soup.find("ol");
@@ -96,9 +122,13 @@ export default function Public(props) {
   };
   const getJustBeforeBusStopLocation = (HTMLText) => {
     const justBeforeBusStopSoup = new JSSoup(HTMLText);
-    const articleElement = justBeforeBusStopSoup.find('article');
-    const busStopLocation = articleElement.contents[3].contents[1].contents[1].contents[1];
-    setPrevBusStop({"data-wx": busStopLocation.attrs["data-wx"], "data-wy": busStopLocation.attrs["data-wy"]});
+    const articleElement = justBeforeBusStopSoup.find("article");
+    const busStopLocation =
+      articleElement.contents[3].contents[1].contents[1].contents[1];
+    setPrevBusStop({
+      "data-wx": busStopLocation.attrs["data-wx"],
+      "data-wy": busStopLocation.attrs["data-wy"],
+    });
   };
   const getJustBeforeBusStopHTML = (href) => {
     const justBeforeBusStopUrl = `https://m.map.kakao.com${href}`;
@@ -136,7 +166,9 @@ export default function Public(props) {
         li_elements[i].attrs["data-name"] === departBusStopName &&
         li_elements[i + steps].attrs["data-name"] === ArriveBusStopName
       ) {
-        getJustBeforeBusStopHTML(li_elements[i + steps - 1].contents[1].attrs["href"]);
+        getJustBeforeBusStopHTML(
+          li_elements[i + steps - 1].contents[1].attrs["href"]
+        );
         break;
       }
     }
@@ -178,6 +210,21 @@ export default function Public(props) {
       </TouchableOpacity>
       <Text>{prevBusStop["data-wx"]}</Text>
       <Text>{prevBusStop["data-wy"]}</Text>
+      <TouchableOpacity onPress={requestPermissions}>
+        <Text>requestPermissions</Text>
+      </TouchableOpacity>
+      {/* <View>
+        {!location ? (
+          <Text>Loading...</Text>
+        ) : (
+          <View>
+            <Text>{location.coords.latitude}</Text>
+            <Text>{location.coords.longitude}</Text>
+            <Text>{location.coords.speed}</Text>
+            <Text>{location.timestamp}</Text>
+          </View>
+        )}
+      </View> */}
     </View>
   );
 }

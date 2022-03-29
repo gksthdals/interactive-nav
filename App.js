@@ -20,7 +20,7 @@ export default function App() {
             // source={{ uri: "https://map.kakao.com" }}
             onLoad={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
-              console.log(nativeEvent.url);
+              // console.log(nativeEvent.url);
               // publicRoute, walkRoute
               if (
                 nativeEvent.url.includes("publicDetailRoute") ||
@@ -34,7 +34,7 @@ export default function App() {
           (() => {
             switch (url.charAt(32)) {
               case "p":
-                return <Public style= {{ flex: 1 }} url={url} />;
+                return <Public style={{ flex: 1 }} url={url} />;
               case "w":
                 return <Walk style={{ flex: 1 }} url={url} />;
               default:
