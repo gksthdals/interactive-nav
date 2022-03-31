@@ -17,6 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription":"Allows App to use location services in the foreground and background.",
         "UIBackgroundModes": ["location", "fetch"]
       }
     },

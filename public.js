@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+} from "react-native";
 import JSSoup from "jssoup";
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 
 const LOCATION_TASK_NAME = "LocationUpdate";
+const JAVASCRIPT_API_KEY = "YOUR KAKAO REST API KEY";
 
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data: { locations }, error }) => {
   if (error) {
@@ -14,7 +22,7 @@ TaskManager.defineTask(LOCATION_TASK_NAME, ({ data: { locations }, error }) => {
   console.log("Received new locations", locations);
 });
 
-const requestPermissions = async () => {
+async function requestPermissions() {
   const foregroundPromise = await Location.requestForegroundPermissionsAsync();
   const backgroundPromise = await Location.requestBackgroundPermissionsAsync();
 
@@ -26,13 +34,18 @@ const requestPermissions = async () => {
       accuracy: Location.Accuracy.Balanced,
     });
   }
-};
+}
 
 export default function Public(props) {
-  // routes.keys:
-  const [routes, setRoutes] = useState([]);
-  const [busRoutes, setBusRoutes] = useState([]);
-  const [prevBusStop, setPrevBusStop] = useState({});
+  // routes.keys: { "data-sx", "data-sy", "data-ex", "data-ey", "class", "txt_station",
+  //                "bus_num", "txt_detail", "data-id", "data-buses", "subway_num" }
+  const [routes, setRoutes] = useState(null);
+  // [routes[index], routes[index+1]] : index -> bus depart / index+1 -> bus arrive
+  const [busRoutes, setBusRoutes] = useState(null);
+  // WCONGNAMUL: { "data-wx" , "data-wy" }
+  const [WCONGNAMUL, setWCONGNAMUL] = useState(null);
+  // WGS84: { "latitude" , "longitude" }
+  const [WGS84, setWGS84] = useState(null);
 
   const getListSectionListDetail = (htmlText) => {
     const soup = new JSSoup(htmlText);
@@ -125,7 +138,7 @@ export default function Public(props) {
     const articleElement = justBeforeBusStopSoup.find("article");
     const busStopLocation =
       articleElement.contents[3].contents[1].contents[1].contents[1];
-    setPrevBusStop({
+    setWCONGNAMUL({
       "data-wx": busStopLocation.attrs["data-wx"],
       "data-wy": busStopLocation.attrs["data-wy"],
     });
@@ -184,6 +197,17 @@ export default function Public(props) {
     };
     request.send();
   };
+  const changeCoords = () => {
+    const url = `https://dapi.kakao.com/v2/local/geo/transcoord.json?x=${WCONGNAMUL["data-wx"]}&y=${WCONGNAMUL["data-wy"]}&input_coord=WCONGNAMUL&output_coord=WGS84`;
+    const request = new XMLHttpRequest();
+    request.open("GET", url, true);
+    request.setRequestHeader("Authorization", "KakaoAK " + JAVASCRIPT_API_KEY);
+    request.onload = () => {
+      const document = JSON.parse(request.responseText).documents[0];
+      setWGS84({"latitude": document["y"], "longitude": document["x"]});
+    };
+    request.send();
+  };
   useEffect(() => {
     const request = new XMLHttpRequest();
     request.open("GET", props.url, true);
@@ -192,45 +216,61 @@ export default function Public(props) {
     };
     request.send();
   }, []);
-  return routes.length === 0 ? (
-    <View style={{ justifyContent: "center", alignItems: "center" }}>
-      <Text>Loading...</Text>
-    </View>
-  ) : (
-    <View style={styles.container}>
-      <TouchableOpacity
-        onPress={
-          busRoutes.length === 0 ? setBusRoutes([routes[2], routes[3]]) : null
-        }
-      >
-        <Text>setBusRoutes!</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={getBusInfoHTML}>
-        <Text>getBusInfoHTML</Text>
-      </TouchableOpacity>
-      <Text>{prevBusStop["data-wx"]}</Text>
-      <Text>{prevBusStop["data-wy"]}</Text>
-      <TouchableOpacity onPress={requestPermissions}>
-        <Text>requestPermissions</Text>
-      </TouchableOpacity>
-      {/* <View>
-        {!location ? (
-          <Text>Loading...</Text>
-        ) : (
-          <View>
-            <Text>{location.coords.latitude}</Text>
-            <Text>{location.coords.longitude}</Text>
-            <Text>{location.coords.speed}</Text>
-            <Text>{location.timestamp}</Text>
+  useEffect(() => {
+    if (busRoutes !== null) {
+      getBusInfoHTML();
+    }
+  }, [busRoutes]);
+  return (
+    <ScrollView>
+      {routes === null ? (
+        <View style={{ justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator />
+        </View>
+      ) : (
+        routes.map((route, index) => (
+          <View key={index} style={styles.route}>
+            <Text>{route["class"]}</Text>
+            <Text>{route["txt_station"]}</Text>
+            {route["class"] === "public_bus depart" ? (
+              <View>
+                <Text>{route["bus_num"]}</Text>
+                <Text>{route["txt_detail"]}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setBusRoutes([routes[index], routes[index + 1]]);
+                  }}
+                >
+                  <Text>setBusRoutes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    changeCoords(WCONGNAMUL["data-wx"], WCONGNAMUL["data-wy"]);
+                  }}
+                >
+                  <Text>changeCoords</Text>
+                </TouchableOpacity>
+                <Text>{WGS84 === null ? "" : WGS84["latitude"]}</Text>
+                <Text>{WGS84 === null ? "" : WGS84["longitude"]}</Text>
+              </View>
+            ) : null}
           </View>
-        )}
-      </View> */}
-    </View>
+        ))
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  route: {
+    backgroundColor: "grey",
+    marginVertical: "2.5%",
+    marginHorizontal: "5%",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 5,
   },
 });
