@@ -8,25 +8,34 @@ import {
   Dimensions,
   TouchableOpacity,
 } from "react-native";
+import { WebView } from "react-native-webview";
+import MapView, {
+  Marker,
+  AnimatedRegion,
+  MarkerAnimated,
+} from "react-native-maps";
 import JSSoup from "jssoup";
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const LOCATION_TASK_NAME = "LocationUpdate";
-const JAVASCRIPT_API_KEY = "2dfe44f17b39fc1ca24032eb27dd48ce";
+const JAVASCRIPT_API_KEY = "API_KEY";
 
 // Location Variables
 let currentLocation = null;
 let prevBusLocation = null;
-
 TaskManager.defineTask(LOCATION_TASK_NAME, ({ data: { locations }, error }) => {
   if (error) {
     // check `error.message` for more details.
     return;
   }
-  console.log("Received new locations", locations);
-  currentLocation = locations[0];
+  const currentLoc = {
+    latitude: locations[0]["coords"]["latitude"],
+    longitude: -locations[0]["coords"]["longitude"],
+  };
+  console.log(currentLoc);
+  currentLocation = currentLoc;
 });
 
 async function requestPermissions() {
@@ -47,6 +56,11 @@ export default function Public(props) {
   // routes.keys: { "data-sx", "data-sy", "data-ex", "data-ey", "class", "txt_station",
   //                "bus_num", "txt_detail", "data-id", "data-buses", "subway_num" }
   const [routes, setRoutes] = useState(null);
+  const [location, setLocation] = useState({
+    // Korea Univ.
+    latitude: 37.58520547371376,
+    longitude: 127.02547413870877,
+  });
 
   const getListSectionListDetail = (htmlText) => {
     const soup = new JSSoup(htmlText);
@@ -223,12 +237,22 @@ export default function Public(props) {
       <View
         style={{
           flex: 3,
-          backgroundColor: "yellow",
-          justifyContent: "center",
-          alignItems: "center",
         }}
       >
-        <Text style={{ fontSize: 50 }}>Map</Text>
+        <MapView
+          style={{ flex: 1 }}
+          initialRegion={{
+            latitude: 37.58520547371376,
+            longitude: 127.02547413870877,
+            latitudeDelta: 0.00922,
+            longitudeDelta: 0.00421,
+          }}
+          onRegionChange={() => {
+            setLocation(currentLocation);
+          }}
+          showsMyLocationButton
+          showsUserLocation
+        />
       </View>
       <View style={{ flex: 1, backgroundColor: "skyblue" }}>
         <ScrollView
@@ -255,7 +279,7 @@ export default function Public(props) {
                           getBusInfoHTML([routes[index], routes[index + 1]]);
                         }}
                       >
-                        <Text>setBusRoutes</Text>
+                        <Text>prevBusLocation</Text>
                       </TouchableOpacity>
                       <Text>
                         {prevBusLocation === null
