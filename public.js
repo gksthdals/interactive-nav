@@ -15,8 +15,8 @@ import * as Location from "expo-location";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const LOCATION_TASK_NAME = "LocationUpdate";
-const REST_API_KEY = "2c5496592ddc68a5a57199f34a037b7a";
-const CLOSED_DISTANCE = 1e-8;
+const REST_API_KEY = "KAKAO_REST_API_KEY";
+const CLOSED_DISTANCE = 5e-8;
 
 async function requestPermissions() {
   const foregroundPromise = await Location.requestForegroundPermissionsAsync();
@@ -64,7 +64,6 @@ export default function Public(props) {
     longitudeDelta: 0.008243657890659506,
   });
   const [nextLocation, setNextLocation] = useState(null);
-  const [toNext, setToNext] = useState(true);
   const [prevBusLoc, setPrevBusLoc] = useState(null);
   const [toPrevBusLoc, setToPrevBusLoc] = useState(true);
 
@@ -253,15 +252,13 @@ export default function Public(props) {
   useEffect(() => {
     if (routes === null) return;
 
-    if (nextLocation === null) {
-      changeCoords(
-        {
-          "data-wx": routes[routeIndex]["data-ex"],
-          "data-wy": routes[routeIndex]["data-ey"],
-        },
-        "next"
-      );
-    }
+    changeCoords(
+      {
+        "data-wx": routes[routeIndex]["data-ex"],
+        "data-wy": routes[routeIndex]["data-ey"],
+      },
+      "next"
+    );
     // if current route is public_bus depart -> get bus route and set prev bus stop location
     if (routes[routeIndex]["class"] === "public_bus depart") {
       const reply = Alert.alert(
@@ -281,11 +278,8 @@ export default function Public(props) {
       (location.latitude - nextLocation.latitude) ** 2 +
       (location.longitude - nextLocation.longitude) ** 2;
 
-    if (toNext === true && distToNext < CLOSED_DISTANCE) {
-      setToNext(false);
-    } else if (toNext === false && distToNext > CLOSED_DISTANCE) {
-      setRouteIndex(routeIndex+1);
-      setToNext(true);
+    if (distToNext < CLOSED_DISTANCE) {
+      setRouteIndex(routeIndex + 1);
     }
 
     // alert at previous bus stop
@@ -294,28 +288,17 @@ export default function Public(props) {
     const distToPrev =
       (location.latitude - prevBusLoc.latitude) ** 2 +
       (location.longitude - prevBusLoc.longitude) ** 2;
-    if (
-      prevBusLoc !== null &&
-      toPrevBusLoc === true &&
-      distToPrev < CLOSED_DISTANCE
-    ) {
+    if (toPrevBusLoc === true && distToPrev < CLOSED_DISTANCE) {
+      console.log("close to prev bus stop!");
       setToPrevBusLoc(false);
-    } else if (
-      prevBusLoc !== null &&
-      toPrevBusLoc === false &&
-      distToPrev > CLOSED_DISTANCE
-    ) {
+    } else if (toPrevBusLoc === false && distToPrev > CLOSED_DISTANCE) {
       Alert.alert("Getting off next bus stop!");
       setToPrevBusLoc(true);
     }
   }, [location]);
   return (
     <View style={{ flex: 1 }}>
-      <View
-        style={{
-          flex: 3,
-        }}
-      >
+      <View style={{ flex: 3 }}>
         <MapView
           style={{ flex: 1 }}
           initialRegion={location}
