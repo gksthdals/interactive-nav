@@ -7,6 +7,7 @@ import {
   View,
   ScrollView,
   Dimensions,
+  TouchableOpacity,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import JSSoup from "jssoup";
@@ -15,8 +16,9 @@ import * as Location from "expo-location";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const LOCATION_TASK_NAME = "LocationUpdate";
-const REST_API_KEY = "KAKAO_REST_API_KEY";
+const REST_API_KEY = "ba75db799f114acf97d205f028cd1cf2";
 const CLOSED_DISTANCE = 5e-8;
+const CLOSED_BUS_STOP_DISTANCE = 5e-7;
 
 async function requestPermissions() {
   const foregroundPromise = await Location.requestForegroundPermissionsAsync();
@@ -41,9 +43,9 @@ export default function Public(props) {
         return;
       }
       const currentLoc = {
-        latitude: parseFloat(locations[0]["coords"]["latitude"]) + 0.26,
+        latitude: locations[0]["coords"]["latitude"],
         latitudeDelta: 0.010011167287203193,
-        longitude: parseFloat(-locations[0]["coords"]["longitude"]) + 5,
+        longitude: locations[0]["coords"]["longitude"],
         longitudeDelta: 0.008252863819677714,
       };
       // console.log("currentLoc:", currentLoc);
@@ -53,9 +55,7 @@ export default function Public(props) {
   // routes.keys: { "data-sx", "data-sy", "data-ex", "data-ey", "class", "txt_station",
   //                "bus_num", "txt_detail", "data-id", "data-buses", "subway_num" }
   const [routes, setRoutes] = useState(null);
-  // current route index
   const [routeIndex, setRouteIndex] = useState(1);
-  // current location
   const [location, setLocation] = useState({
     // Korea Univ.
     latitude: 37.58520547371376,
@@ -64,8 +64,12 @@ export default function Public(props) {
     longitudeDelta: 0.008243657890659506,
   });
   const [nextLocation, setNextLocation] = useState(null);
+  // public_bus
   const [prevBusLoc, setPrevBusLoc] = useState(null);
   const [toPrevBusLoc, setToPrevBusLoc] = useState(true);
+  // public_subway
+  const [timeDuration, setTimeDuration] = useState(0);
+  const [timeToAlert, setTimeToAlert] = useState(null);
 
   const getListSectionListDetail = (htmlText) => {
     const soup = new JSSoup(htmlText);
@@ -269,6 +273,28 @@ export default function Public(props) {
     } else {
       setPrevBusLoc(null);
     }
+    // if current route is public_subway depart -> get time duration and set timerDuration
+    if (routes[routeIndex]["class"] === "public_subway depart") {
+      const reply = Alert.alert(
+        "Public subway depart",
+        "Do you want to receive Alert at previous subway station?"
+      );
+      const subway_detail = routes[routeIndex]["txt_detail"];
+      let hours = 0;
+      let minutes = 0;
+      if (subway_detail.includes("시간")) {
+        hours = parseInt(
+          subway_detail.substring(0, subway_detail.indexOf("시"))
+        );
+      }
+      if (subway_detail.includes("분")) {
+        minutes = parseInt(
+          subway_detail.substring(0, subway_detail.indexOf("분"))
+        );
+      }
+      console.log(`${hours}h ${minutes}min!`);
+      setTimeDuration(hours * 60 + minutes - 1);
+    }
   }, [routes, routeIndex]);
   useEffect(() => {
     if (nextLocation === null) return;
@@ -283,17 +309,29 @@ export default function Public(props) {
     }
 
     // alert at previous bus stop
-    if (prevBusLoc === null) return;
+    if (prevBusLoc !== null) {
+      const distToPrev =
+        (location.latitude - prevBusLoc.latitude) ** 2 +
+        (location.longitude - prevBusLoc.longitude) ** 2;
+      if (toPrevBusLoc === true && distToPrev < CLOSED_BUS_STOP_DISTANCE) {
+        console.log("close to prev bus stop!");
+        setToPrevBusLoc(false);
+      } else if (
+        toPrevBusLoc === false &&
+        distToPrev > CLOSED_BUS_STOP_DISTANCE
+      ) {
+        Alert.alert("Getting off next bus stop!");
+        setToPrevBusLoc(true);
+      }
+    }
 
-    const distToPrev =
-      (location.latitude - prevBusLoc.latitude) ** 2 +
-      (location.longitude - prevBusLoc.longitude) ** 2;
-    if (toPrevBusLoc === true && distToPrev < CLOSED_DISTANCE) {
-      console.log("close to prev bus stop!");
-      setToPrevBusLoc(false);
-    } else if (toPrevBusLoc === false && distToPrev > CLOSED_DISTANCE) {
-      Alert.alert("Getting off next bus stop!");
-      setToPrevBusLoc(true);
+    // alert at previous subway station
+    if (timeToAlert !== null) {
+      const currentTime = Date.parse(new Date());
+      if (currentTime > timeToAlert) {
+        Alert.alert("Getting off next subway station!");
+        setTimeToAlert(null);
+      }
     }
   }, [location]);
   return (
@@ -342,6 +380,21 @@ export default function Public(props) {
                     <View>
                       <Text>{route["bus_num"]}</Text>
                       <Text>{route["txt_detail"]}</Text>
+                    </View>
+                  ) : null}
+                  {route["class"] === "public_subway depart" ? (
+                    <View>
+                      <Text>Line {route["subway_num"]}</Text>
+                      <Text>{route["txt_detail"]}</Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setTimeToAlert(
+                            Date.parse(new Date()) + timeDuration * 60000
+                          );
+                        }}
+                      >
+                        <Text>Take the subway now!</Text>
+                      </TouchableOpacity>
                     </View>
                   ) : null}
                 </View>
