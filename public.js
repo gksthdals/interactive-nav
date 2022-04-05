@@ -92,7 +92,7 @@ export default function Public(props) {
         longitudeDelta: 0.008252863819677714,
       };
       // console.log("currentLoc:", currentLoc);
-      // setLocation(currentLoc);
+      setLocation(currentLoc);
     }
   );
   // routes.keys: { "data-sx", "data-sy", "data-ex", "data-ey", "class", "txt_station",
@@ -414,17 +414,14 @@ export default function Public(props) {
       }
     }
   }, [location]);
-  
+
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 3 }}>
         <MapView
           style={{ flex: 1 }}
           initialRegion={location}
-          onRegionChange={(region) => {
-            setLocation(region);
-          }}
-          // region={location}
+          region={location}
         >
           <Marker
             coordinate={{
@@ -456,9 +453,6 @@ export default function Public(props) {
                   }
                 >
                   {/* <Text>{route["class"]}</Text> */}
-                  {index === routeIndex ? (
-                    <Text style={{}}>현재 구간</Text>
-                  ) : null}
                   <Text>{route["txt_station"]}</Text>
                   {route["class"] === "public_bus depart" ? (
                     <View>
