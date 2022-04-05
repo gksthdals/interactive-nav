@@ -91,7 +91,6 @@ export default function Public(props) {
         longitude: locations[0]["coords"]["longitude"],
         longitudeDelta: 0.008252863819677714,
       };
-      // console.log("currentLoc:", currentLoc);
       setLocation(currentLoc);
     }
   );
