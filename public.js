@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
   Alert,
   Text,
   View,
+  Platform,
   ScrollView,
   Dimensions,
   TouchableOpacity,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import JSSoup from "jssoup";
+import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import * as Location from "expo-location";
 
@@ -19,6 +21,15 @@ const LOCATION_TASK_NAME = "LocationUpdate";
 const REST_API_KEY = "ba75db799f114acf97d205f028cd1cf2";
 const CLOSED_DISTANCE = 5e-8;
 const CLOSED_BUS_STOP_DISTANCE = 5e-7;
+const MINUTES_TO_ALERT_SUBWAY = 3;
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 async function requestPermissions() {
   const foregroundPromise = await Location.requestForegroundPermissionsAsync();
@@ -32,6 +43,38 @@ async function requestPermissions() {
       accuracy: Location.Accuracy.Balanced,
     });
   }
+}
+async function schedulePushNotification({ title, body }) {
+  await Notifications.scheduleNotificationAsync({
+    content: { title, body },
+    trigger: { seconds: 3 },
+  });
+}
+async function registerForPushNotificationsAsync() {
+  let token;
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== "granted") {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+  if (finalStatus !== "granted") {
+    alert("Failed to get push token for push notification!");
+    return;
+  }
+  token = (await Notifications.getExpoPushTokenAsync()).data;
+  console.log(token);
+
+  if (Platform.OS === "android") {
+    Notifications.setNotificationChannelAsync("default", {
+      name: "default",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#FF231F7C",
+    });
+  }
+
+  return token;
 }
 
 export default function Public(props) {
@@ -58,9 +101,9 @@ export default function Public(props) {
   const [routeIndex, setRouteIndex] = useState(1);
   const [location, setLocation] = useState({
     // Korea Univ.
-    latitude: 37.58520547371376,
+    latitude: 37.58930817044492,
     latitudeDelta: 0.010000000000594866,
-    longitude: 127.02547413870877,
+    longitude: 127.03427082427791,
     longitudeDelta: 0.008243657890659506,
   });
   const [nextLocation, setNextLocation] = useState(null);
@@ -70,6 +113,11 @@ export default function Public(props) {
   // public_subway
   const [timeDuration, setTimeDuration] = useState(0);
   const [timeToAlert, setTimeToAlert] = useState(null);
+  // notifications
+  const [expoPushToken, setExpoPushToken] = useState("");
+  const [notification, setNotification] = useState(false);
+  const notificationListener = useRef();
+  const responseListener = useRef();
 
   const getListSectionListDetail = (htmlText) => {
     const soup = new JSSoup(htmlText);
@@ -233,7 +281,7 @@ export default function Public(props) {
       const document = JSON.parse(request.responseText).documents[0];
       const WGS84 = { latitude: document["y"], longitude: document["x"] };
       if (type === "next") {
-        console.log(routeIndex + "번째 Route\nnextLocation :", WGS84);
+        console.log(routeIndex + "번째 구간\nNext Point :", WGS84);
         setNextLocation(WGS84);
       } else if (type === "prev") {
         console.log("prevBusStop :", WGS84);
@@ -242,10 +290,11 @@ export default function Public(props) {
     };
     request.send();
   };
+
+  // request permissions & public routes
   useEffect(() => {
-    // request fore/background permissions
     requestPermissions();
-    // request public routes & details
+
     const request = new XMLHttpRequest();
     request.open("GET", props.url, true);
     request.onload = () => {
@@ -253,6 +302,30 @@ export default function Public(props) {
     };
     request.send();
   }, []);
+  // notifications
+  useEffect(() => {
+    registerForPushNotificationsAsync().then((token) =>
+      setExpoPushToken(token)
+    );
+
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification) => {
+        setNotification(notification);
+      });
+
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        console.log(response);
+      });
+
+    return () => {
+      Notifications.removeNotificationSubscription(
+        notificationListener.current
+      );
+      Notifications.removeNotificationSubscription(responseListener.current);
+    };
+  }, []);
+  // change coordinates to WGS84 & set public notifications
   useEffect(() => {
     if (routes === null) return;
 
@@ -293,9 +366,10 @@ export default function Public(props) {
         );
       }
       console.log(`${hours}h ${minutes}min!`);
-      setTimeDuration(hours * 60 + minutes - 1);
+      setTimeDuration(hours * 60 + minutes - MINUTES_TO_ALERT_SUBWAY);
     }
   }, [routes, routeIndex]);
+  // track current location & timestamp
   useEffect(() => {
     if (nextLocation === null) return;
 
@@ -320,7 +394,10 @@ export default function Public(props) {
         toPrevBusLoc === false &&
         distToPrev > CLOSED_BUS_STOP_DISTANCE
       ) {
-        Alert.alert("Getting off next bus stop!");
+        schedulePushNotification({
+          title: "public bus",
+          body: "Getting off next bus stop!",
+        });
         setToPrevBusLoc(true);
       }
     }
@@ -329,11 +406,15 @@ export default function Public(props) {
     if (timeToAlert !== null) {
       const currentTime = Date.parse(new Date());
       if (currentTime > timeToAlert) {
-        Alert.alert("Getting off next subway station!");
+        schedulePushNotification({
+          title: "public subway",
+          body: "Getting off next subway station!",
+        });
         setTimeToAlert(null);
       }
     }
   }, [location]);
+  
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 3 }}>
@@ -374,7 +455,10 @@ export default function Public(props) {
                       : { ...styles.route_details, backgroundColor: "grey" }
                   }
                 >
-                  <Text>{route["class"]}</Text>
+                  {/* <Text>{route["class"]}</Text> */}
+                  {index === routeIndex ? (
+                    <Text style={{}}>현재 구간</Text>
+                  ) : null}
                   <Text>{route["txt_station"]}</Text>
                   {route["class"] === "public_bus depart" ? (
                     <View>
