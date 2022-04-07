@@ -19,8 +19,8 @@ import * as Location from "expo-location";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const LOCATION_TASK_NAME = "LocationUpdate";
 const REST_API_KEY = "ba75db799f114acf97d205f028cd1cf2";
-const CLOSED_DISTANCE = 5e-8;
-const CLOSED_BUS_STOP_DISTANCE = 5e-7;
+const CLOSED_DISTANCE = 3e-8;
+const CLOSED_BUS_STOP_DISTANCE = 3e-7;
 const MINUTES_TO_ALERT_SUBWAY = 3;
 
 Notifications.setNotificationHandler({
@@ -40,14 +40,14 @@ async function requestPermissions() {
     backgroundPromise.status === "granted"
   ) {
     await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-      accuracy: Location.Accuracy.Balanced,
+      accuracy: Location.Accuracy.Highest,
     });
   }
 }
 async function schedulePushNotification({ title, body }) {
   await Notifications.scheduleNotificationAsync({
     content: { title, body },
-    trigger: { seconds: 3 },
+    trigger: { seconds: 1 },
   });
 }
 async function registerForPushNotificationsAsync() {
@@ -91,9 +91,12 @@ export default function Public(props) {
         longitude: locations[0]["coords"]["longitude"],
         longitudeDelta: 0.008252863819677714,
       };
-      setLocation(currentLoc);
+      // setLocation(currentLoc);
     }
   );
+  let syncVariable = true;
+  let subwayBtnAvailable = false;
+  const [use, setUse] = useState(true);
   // routes.keys: { "data-sx", "data-sy", "data-ex", "data-ey", "class", "txt_station",
   //                "bus_num", "txt_detail", "data-id", "data-buses", "subway_num" }
   const [routes, setRoutes] = useState(null);
@@ -282,6 +285,7 @@ export default function Public(props) {
       if (type === "next") {
         console.log(routeIndex + "번째 구간\nNext Point :", WGS84);
         setNextLocation(WGS84);
+        syncVariable = true;
       } else if (type === "prev") {
         console.log("prevBusStop :", WGS84);
         setPrevBusLoc(WGS84);
@@ -328,29 +332,31 @@ export default function Public(props) {
   useEffect(() => {
     if (routes === null) return;
 
-    changeCoords(
-      {
-        "data-wx": routes[routeIndex]["data-ex"],
-        "data-wy": routes[routeIndex]["data-ey"],
-      },
-      "next"
-    );
+    if (routeIndex === 1) {
+      changeCoords(
+        {
+          "data-wx": routes[1]["data-ex"],
+          "data-wy": routes[1]["data-ey"],
+        },
+        "next"
+      );
+    }
     // if current route is public_bus depart -> get bus route and set prev bus stop location
     if (routes[routeIndex]["class"] === "public_bus depart") {
-      const reply = Alert.alert(
-        "Public bus depart",
-        "Do you want to receive Alert at previous bus stop?"
-      );
+      // const reply = Alert.alert(
+      //   "Public bus depart",
+      //   "Do you want to receive Alert at previous bus stop?"
+      // );
       getBusInfoHTML([routes[routeIndex], routes[routeIndex + 1]]);
     } else {
       setPrevBusLoc(null);
     }
     // if current route is public_subway depart -> get time duration and set timerDuration
     if (routes[routeIndex]["class"] === "public_subway depart") {
-      const reply = Alert.alert(
-        "Public subway depart",
-        "Do you want to receive Alert at previous subway station?"
-      );
+      // const reply = Alert.alert(
+      //   "Public subway depart",
+      //   "Do you want to receive Alert at previous subway station?"
+      // );
       const subway_detail = routes[routeIndex]["txt_detail"];
       let hours = 0;
       let minutes = 0;
@@ -365,6 +371,7 @@ export default function Public(props) {
         );
       }
       console.log(`${hours}h ${minutes}min!`);
+      subwayBtnAvailable = true;
       setTimeDuration(hours * 60 + minutes - MINUTES_TO_ALERT_SUBWAY);
     }
   }, [routes, routeIndex]);
@@ -377,8 +384,19 @@ export default function Public(props) {
       (location.latitude - nextLocation.latitude) ** 2 +
       (location.longitude - nextLocation.longitude) ** 2;
 
-    if (distToNext < CLOSED_DISTANCE) {
-      setRouteIndex(routeIndex + 1);
+    if (distToNext < CLOSED_DISTANCE && syncVariable === true) {
+      if (routeIndex === routes.length - 1) {
+        setUse(false);
+      } else {
+        setRouteIndex(routeIndex + 1);
+        changeCoords(
+          {
+            "data-wx": routes[routeIndex]["data-ex"],
+            "data-wy": routes[routeIndex]["data-ey"],
+          },
+          "next"
+        );
+      }
     }
 
     // alert at previous bus stop
@@ -387,15 +405,14 @@ export default function Public(props) {
         (location.latitude - prevBusLoc.latitude) ** 2 +
         (location.longitude - prevBusLoc.longitude) ** 2;
       if (toPrevBusLoc === true && distToPrev < CLOSED_BUS_STOP_DISTANCE) {
-        console.log("close to prev bus stop!");
         setToPrevBusLoc(false);
       } else if (
         toPrevBusLoc === false &&
         distToPrev > CLOSED_BUS_STOP_DISTANCE
       ) {
         schedulePushNotification({
-          title: "public bus",
-          body: "Getting off next bus stop!",
+          title: "InteractiveMap",
+          body: "다음 정거장에서 하차하세요!",
         });
         setToPrevBusLoc(true);
       }
@@ -406,8 +423,8 @@ export default function Public(props) {
       const currentTime = Date.parse(new Date());
       if (currentTime > timeToAlert) {
         schedulePushNotification({
-          title: "public subway",
-          body: "Getting off next subway station!",
+          title: "InteractiveMap",
+          body: "도착 예정 시간 3분 남았습니다!",
         });
         setTimeToAlert(null);
       }
@@ -420,66 +437,128 @@ export default function Public(props) {
         <MapView
           style={{ flex: 1 }}
           initialRegion={location}
-          region={location}
+          onRegionChange={(region) => {
+            setLocation(region);
+          }}
+          // region={location}
         >
-          <Marker
-            coordinate={{
-              latitude: location["latitude"],
-              longitude: location["longitude"],
-            }}
-          />
+          <View>
+            {location === null ? null : (
+              <Marker
+                coordinate={{
+                  latitude: location["latitude"],
+                  longitude: location["longitude"],
+                }}
+                pinColor="red"
+              />
+            )}
+          </View>
+          {nextLocation === null ? null : (
+            <Marker coordinate={nextLocation} pinColor="blue" />
+          )}
         </MapView>
       </View>
-      <View style={{ flex: 1, backgroundColor: "skyblue" }}>
-        {routes === null ? (
-          <View style={{ justifyContent: "center", alignItems: "center" }}>
-            <ActivityIndicator />
-          </View>
-        ) : (
-          <ScrollView
-            pagingEnabled
-            horizontal
-            contentContainerStyle={styles.routes}
-            contentOffset={{ x: SCREEN_WIDTH * routeIndex, y: 0 }}
-          >
-            {routes.map((route, index) => (
-              <View key={index} style={styles.route}>
-                <View
-                  style={
-                    index === routeIndex
-                      ? { ...styles.route_details, backgroundColor: "yellow" }
-                      : { ...styles.route_details, backgroundColor: "grey" }
-                  }
-                >
-                  {/* <Text>{route["class"]}</Text> */}
-                  <Text>{route["txt_station"]}</Text>
-                  {route["class"] === "public_bus depart" ? (
-                    <View>
-                      <Text>{route["bus_num"]}</Text>
-                      <Text>{route["txt_detail"]}</Text>
-                    </View>
-                  ) : null}
-                  {route["class"] === "public_subway depart" ? (
-                    <View>
-                      <Text>Line {route["subway_num"]}</Text>
-                      <Text>{route["txt_detail"]}</Text>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setTimeToAlert(
-                            Date.parse(new Date()) + timeDuration * 60000
-                          );
-                        }}
-                      >
-                        <Text>Take the subway now!</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : null}
+      {use ? (
+        <View style={{ flex: 1, backgroundColor: "skyblue" }}>
+          {routes === null ? (
+            <View style={{ justifyContent: "center", alignItems: "center" }}>
+              <ActivityIndicator />
+            </View>
+          ) : (
+            <ScrollView
+              pagingEnabled
+              horizontal
+              contentContainerStyle={styles.routes}
+              contentOffset={{ x: SCREEN_WIDTH * routeIndex, y: 0 }}
+            >
+              {routes.map((route, index) => (
+                <View key={index} style={styles.route}>
+                  <View
+                    style={
+                      index === routeIndex
+                        ? { ...styles.route_details, backgroundColor: "yellow" }
+                        : { ...styles.route_details, backgroundColor: "grey" }
+                    }
+                  >
+                    <Text
+                      style={{
+                        flex: 1,
+                        textAlign: "center",
+                        fontSize: 18,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {route["txt_station"]}
+                    </Text>
+                    {route["class"] === "public_bus depart" ? (
+                      <View style={{ flex: 2, alignItems: "center" }}>
+                        <Text style={{ flex: 1, fontWeight: "600" }}>
+                          No: {route["bus_num"]}
+                        </Text>
+                        <Text style={{ flex: 1, fontWeight: "600" }}>
+                          {route["txt_detail"]}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {route["class"] === "public_subway depart" ? (
+                      <View style={{ flex: 4, alignItems: "center" }}>
+                        <Text style={{ flex: 1, fontWeight: "600" }}>
+                          No: {route["subway_num"]}
+                        </Text>
+                        <Text style={{ flex: 1, fontWeight: "600" }}>
+                          {route["txt_detail"]}
+                        </Text>
+                        <TouchableOpacity
+                          style={{
+                            flex: 2,
+                            width: "70%",
+                            backgroundColor: "tomato",
+                            borderRadius: 20,
+                          }}
+                          onPress={() => {
+                            if (subwayBtnAvailable) {
+                              subwayBtnAvailable = false;
+                              schedulePushNotification({
+                                title: "InteractiveMap",
+                                body: timeDuration + "분 후에 알려드릴께요!",
+                              });
+                              setTimeToAlert(
+                                Date.parse(new Date()) + timeDuration * 60000
+                              );
+                            }
+                          }}
+                        >
+                          {routeIndex === index ? (
+                            <Text
+                              style={{
+                                flex: 1,
+                                textAlign: "center",
+                                marginTop: 15,
+                                marginBottom: 10,
+                                fontWeight: "600",
+                              }}
+                            >
+                              {subwayBtnAvailable
+                                ? "Press when getting on the subway!"
+                                : timeToAlert !== null
+                                ? parseInt(
+                                    (timeToAlert - Date.parse(new Date())) /
+                                      60000 +
+                                      1
+                                  ) + "분 후에 알림 전송!"
+                                : "내릴 준비 하세요!"}
+                            </Text>
+                          ) : null}
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-      </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }

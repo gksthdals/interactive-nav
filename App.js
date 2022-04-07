@@ -14,7 +14,10 @@ export default function App() {
       <View style={styles.container}>
         {url === "" ? (
           <WebView
-            source={{ uri: "https://map.kakao.com" }}
+            // source={{ uri: "https://map.kakao.com" }}
+            source={{
+              uri: "https://m.map.kakao.com/actions/publicDetailRoute?mode=list&service=&startLoc=서울+성북구+안암동5가+1-2&sxEnc=MOQPSMHQMOPRLNQNM&syEnc=QNMSLQQIRSRPSQOLP&endLoc=현대프라임아파트&exEnc=MMOPSM&eyEnc=QNLLRQV&ranking=2&ids=,P11198376",
+            }}
             onLoad={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
               if (
