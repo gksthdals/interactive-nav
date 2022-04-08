@@ -77,6 +77,7 @@ async function registerForPushNotificationsAsync() {
   return token;
 }
 
+let syncVariable = true;
 export default function Public(props) {
   TaskManager.defineTask(
     LOCATION_TASK_NAME,
@@ -91,18 +92,19 @@ export default function Public(props) {
         longitude: locations[0]["coords"]["longitude"],
         longitudeDelta: 0.008252863819677714,
       };
-      // setLocation(currentLoc);
+      if (!test) {
+        setLocation(currentLoc);
+      }
     }
   );
-  let syncVariable = true;
-  let subwayBtnAvailable = false;
-  const [use, setUse] = useState(true);
+  const [useApp, setUseApp] = useState(true);
+  const [test, setTest] = useState(false);
   // routes.keys: { "data-sx", "data-sy", "data-ex", "data-ey", "class", "txt_station",
   //                "bus_num", "txt_detail", "data-id", "data-buses", "subway_num" }
   const [routes, setRoutes] = useState(null);
   const [routeIndex, setRouteIndex] = useState(1);
   const [location, setLocation] = useState({
-    // Korea Univ.
+    // Korea Univ. to be modified!
     latitude: 37.58930817044492,
     latitudeDelta: 0.010000000000594866,
     longitude: 127.03427082427791,
@@ -115,6 +117,7 @@ export default function Public(props) {
   // public_subway
   const [timeDuration, setTimeDuration] = useState(0);
   const [timeToAlert, setTimeToAlert] = useState(null);
+  const [subwayBtnAvailable, setSubwayBtnAvailable] = useState(false);
   // notifications
   const [expoPushToken, setExpoPushToken] = useState("");
   const [notification, setNotification] = useState(false);
@@ -283,7 +286,6 @@ export default function Public(props) {
       const document = JSON.parse(request.responseText).documents[0];
       const WGS84 = { latitude: document["y"], longitude: document["x"] };
       if (type === "next") {
-        console.log(routeIndex + "번째 구간\nNext Point :", WGS84);
         setNextLocation(WGS84);
         syncVariable = true;
       } else if (type === "prev") {
@@ -305,6 +307,18 @@ export default function Public(props) {
     };
     request.send();
   }, []);
+  // initialize nextLocation
+  useEffect(() => {
+    if (routes === null) return;
+
+    changeCoords(
+      {
+        "data-wx": routes[1]["data-ex"],
+        "data-wy": routes[1]["data-ey"],
+      },
+      "next"
+    );
+  }, [routes]);
   // notifications
   useEffect(() => {
     registerForPushNotificationsAsync().then((token) =>
@@ -332,15 +346,6 @@ export default function Public(props) {
   useEffect(() => {
     if (routes === null) return;
 
-    if (routeIndex === 1) {
-      changeCoords(
-        {
-          "data-wx": routes[1]["data-ex"],
-          "data-wy": routes[1]["data-ey"],
-        },
-        "next"
-      );
-    }
     // if current route is public_bus depart -> get bus route and set prev bus stop location
     if (routes[routeIndex]["class"] === "public_bus depart") {
       // const reply = Alert.alert(
@@ -371,7 +376,7 @@ export default function Public(props) {
         );
       }
       console.log(`${hours}h ${minutes}min!`);
-      subwayBtnAvailable = true;
+      setSubwayBtnAvailable(true);
       setTimeDuration(hours * 60 + minutes - MINUTES_TO_ALERT_SUBWAY);
     }
   }, [routes, routeIndex]);
@@ -386,16 +391,17 @@ export default function Public(props) {
 
     if (distToNext < CLOSED_DISTANCE && syncVariable === true) {
       if (routeIndex === routes.length - 1) {
-        setUse(false);
+        setUseApp(false);
       } else {
-        setRouteIndex(routeIndex + 1);
+        syncVariable = false;
         changeCoords(
           {
-            "data-wx": routes[routeIndex]["data-ex"],
-            "data-wy": routes[routeIndex]["data-ey"],
+            "data-wx": routes[routeIndex + 1]["data-ex"],
+            "data-wy": routes[routeIndex + 1]["data-ey"],
           },
           "next"
         );
+        setRouteIndex(routeIndex + 1);
       }
     }
 
@@ -437,10 +443,12 @@ export default function Public(props) {
         <MapView
           style={{ flex: 1 }}
           initialRegion={location}
+          region={test ? null : location}
           onRegionChange={(region) => {
-            setLocation(region);
+            if (test) {
+              setLocation(region);
+            }
           }}
-          // region={location}
         >
           <View>
             {location === null ? null : (
@@ -458,7 +466,7 @@ export default function Public(props) {
           )}
         </MapView>
       </View>
-      {use ? (
+      {useApp ? (
         <View style={{ flex: 1, backgroundColor: "skyblue" }}>
           {routes === null ? (
             <View style={{ justifyContent: "center", alignItems: "center" }}>
@@ -480,78 +488,113 @@ export default function Public(props) {
                         : { ...styles.route_details, backgroundColor: "grey" }
                     }
                   >
-                    <Text
+                    <View
                       style={{
                         flex: 1,
-                        textAlign: "center",
-                        fontSize: 18,
-                        fontWeight: "700",
                       }}
                     >
-                      {route["txt_station"]}
-                    </Text>
-                    {route["class"] === "public_bus depart" ? (
-                      <View style={{ flex: 2, alignItems: "center" }}>
-                        <Text style={{ flex: 1, fontWeight: "600" }}>
-                          No: {route["bus_num"]}
-                        </Text>
-                        <Text style={{ flex: 1, fontWeight: "600" }}>
-                          {route["txt_detail"]}
-                        </Text>
-                      </View>
-                    ) : null}
-                    {route["class"] === "public_subway depart" ? (
-                      <View style={{ flex: 4, alignItems: "center" }}>
-                        <Text style={{ flex: 1, fontWeight: "600" }}>
-                          No: {route["subway_num"]}
-                        </Text>
-                        <Text style={{ flex: 1, fontWeight: "600" }}>
-                          {route["txt_detail"]}
-                        </Text>
-                        <TouchableOpacity
-                          style={{
-                            flex: 2,
-                            width: "70%",
-                            backgroundColor: "tomato",
-                            borderRadius: 20,
-                          }}
-                          onPress={() => {
-                            if (subwayBtnAvailable) {
-                              subwayBtnAvailable = false;
-                              schedulePushNotification({
-                                title: "InteractiveMap",
-                                body: timeDuration + "분 후에 알려드릴께요!",
-                              });
-                              setTimeToAlert(
-                                Date.parse(new Date()) + timeDuration * 60000
-                              );
-                            }
-                          }}
-                        >
-                          {routeIndex === index ? (
+                      {index === routeIndex ? (
+                        <View style={{ flex: 1, flexDirection: "row" }}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setTest(false);
+                            }}
+                            style={styles.typeButton}
+                          >
                             <Text
-                              style={{
-                                flex: 1,
-                                textAlign: "center",
-                                marginTop: 15,
-                                marginBottom: 10,
-                                fontWeight: "600",
-                              }}
+                              style={{ marginTop: "4%", fontWeight: "600" }}
                             >
-                              {subwayBtnAvailable
-                                ? "Press when getting on the subway!"
-                                : timeToAlert !== null
-                                ? parseInt(
-                                    (timeToAlert - Date.parse(new Date())) /
-                                      60000 +
-                                      1
-                                  ) + "분 후에 알림 전송!"
-                                : "내릴 준비 하세요!"}
+                              useApp
                             </Text>
-                          ) : null}
-                        </TouchableOpacity>
-                      </View>
-                    ) : null}
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setTest(true);
+                            }}
+                            style={styles.typeButton}
+                          >
+                            <Text
+                              style={{ marginTop: "4%", fontWeight: "600" }}
+                            >
+                              useTest
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={{ flex: 3 }}>
+                      <Text
+                        style={{
+                          flex: 1,
+                          textAlign: "center",
+                          fontSize: 18,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {route["txt_station"]}
+                      </Text>
+                      {route["class"] === "public_bus depart" ? (
+                        <View style={{ flex: 2, alignItems: "center" }}>
+                          <Text style={{ flex: 1, fontWeight: "600" }}>
+                            Bus No: {route["bus_num"]}
+                          </Text>
+                          <Text style={{ flex: 1, fontWeight: "600" }}>
+                            {route["txt_detail"]}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {route["class"] === "public_subway depart" ? (
+                        <View style={{ flex: 4, alignItems: "center" }}>
+                          <Text style={{ flex: 1, fontWeight: "600" }}>
+                            Subway No: {route["subway_num"]}
+                          </Text>
+                          <Text style={{ flex: 1, fontWeight: "600" }}>
+                            {route["txt_detail"]}
+                          </Text>
+                          <TouchableOpacity
+                            style={{
+                              flex: 2,
+                              width: "70%",
+                              backgroundColor: "tomato",
+                              borderRadius: 20,
+                            }}
+                            onPress={() => {
+                              if (subwayBtnAvailable) {
+                                setSubwayBtnAvailable(false);
+                                schedulePushNotification({
+                                  title: "InteractiveMap",
+                                  body: timeDuration + "분 후에 알려드릴께요!",
+                                });
+                                setTimeToAlert(
+                                  Date.parse(new Date()) + timeDuration * 60000
+                                );
+                              }
+                            }}
+                          >
+                            {routeIndex === index ? (
+                              <Text
+                                style={{
+                                  flex: 1,
+                                  textAlign: "center",
+                                  marginTop: "6%",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {subwayBtnAvailable
+                                  ? "Press when getting on the subway!"
+                                  : timeToAlert !== null
+                                  ? parseInt(
+                                      (timeToAlert - Date.parse(new Date())) /
+                                        60000 +
+                                        1
+                                    ) + "분 후에 알림 전송!"
+                                  : "내릴 준비 하세요!"}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
               ))}
@@ -578,7 +621,15 @@ const styles = StyleSheet.create({
     marginVertical: "5%",
     marginHorizontal: "5%",
     borderRadius: 15,
-    paddingVertical: "5%",
-    paddingHorizontal: "5%",
+    paddingVertical: "2%",
+    paddingHorizontal: "2%",
+  },
+  typeButton: {
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 20,
+    marginVertical: 5,
+    borderRadius: 15,
+    backgroundColor: "tomato",
   },
 });
