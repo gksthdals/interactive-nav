@@ -289,7 +289,6 @@ export default function Public(props) {
         setNextLocation(WGS84);
         syncVariable = true;
       } else if (type === "prev") {
-        console.log("prevBusStop :", WGS84);
         setPrevBusLoc(WGS84);
       }
     };
@@ -488,11 +487,7 @@ export default function Public(props) {
                         : { ...styles.route_details, backgroundColor: "grey" }
                     }
                   >
-                    <View
-                      style={{
-                        flex: 1,
-                      }}
-                    >
+                    <View style={{ flex: 1 }}>
                       {index === routeIndex ? (
                         <View style={{ flex: 1, flexDirection: "row" }}>
                           <TouchableOpacity
