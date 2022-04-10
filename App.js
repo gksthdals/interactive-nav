@@ -14,9 +14,11 @@ export default function App() {
       <View style={styles.container}>
         {url === "" ? (
           <WebView
-            source={{ uri: "https://map.kakao.com" }}
+            // source={{ uri: "https://map.kakao.com" }}
+            source={{ uri: "https://place.map.kakao.com/m/17565436" }}
             onLoad={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
+              console.log(nativeEvent.url);
               if (
                 nativeEvent.url.includes("publicDetailRoute") ||
                 nativeEvent.url.includes("walkRoute")
@@ -24,14 +26,15 @@ export default function App() {
                 setUrl(nativeEvent.url);
               }
             }}
+            
           />
         ) : (
           (() => {
             switch (url.charAt(32)) {
               case "p":
                 return <Public style={{ flex: 1 }} url={url} />;
-              case "w":
-                return <Walk style={{ flex: 1 }} url={url} />;
+              // case "w":
+              //   return <Walk style={{ flex: 1 }} url={url} />;
               default:
                 return (
                   <Text
